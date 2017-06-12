@@ -53,7 +53,7 @@ case class SpillableAggregate(
                                 aggregate: AggregateExpression,
                                 resultAttribute: AttributeReference)
 
-  private[this] val aggregateComputation: ComputedAggregate = aggregateExpressions.flatMap { agg =>
+  private[this] val ComputedAggregate = aggregateExpressions.flatMap { agg =>
     agg.collect{
 	case a: AggregateExpression =>
 	  ComputedAggregate(a, BindReferences.bindReference(a, child.output), AttributeReferences(s"aggResult:$a", a.dataType, a.nullable)())
@@ -126,7 +126,7 @@ case class SpillableAggregate(
       	  if (aggregateResult.hasNext){
 	    true
 	  } else {
-	    if(dp_iter.hasNext && fetchSpill())
+	    if(dpIter.hasNext && fetchSpill())
 	      true
 	    else
 	      false
@@ -143,7 +143,7 @@ case class SpillableAggregate(
         * @return
         */
       private def aggregate(): Iterator[Row] = {
-        while(data.hasNext)
+        while(data.hasNext){
 	  val row: Row = data.next()
 	  val group = groupingProjecting(row)
 	  val agg = currentAggregationTable(gp)

@@ -128,10 +128,12 @@ object CS143Utils {
     * @return
     */
   def getUdfFromExpressions(expressions: Seq[Expression]): ScalaUdf = {
-    /* IMPLEMENT THIS METHOD */
-    null
+    var udf: ScalaUdf = null
+    expressions.foreach { (e: Expression) => {
+      if (e.isInstanceOf[ScalaUDF]) {
+      	 udf = e.asInstanceOf[ScalaUdf]
+      }}}
   }
-
   /**
     * This function takes a sequence of expressions. If there is no UDF in the sequence of expressions, it does
     * a regular projection operation.
@@ -222,15 +224,27 @@ object CachingIteratorGenerator {
       val postUdfProjection = CS143Utils.getNewProjection(postUdfExpressions, inputSchema)
       val cache: JavaHashMap[Row, Row] = new JavaHashMap[Row, Row]()
 
-      def hasNext() = {
-        /* IMPLEMENT THIS METHOD */
-        false
+     def hasNext() = {
+     	 input.hasNext
       }
 
       def next() = {
-        /* IMPLEMENT THIS METHOD */
-        null
-      }
+        if(hasNext()){
+          val preUdf: Row = preUdfProjection.apply(row)
+          val postUdf: Row = postUdfProjection.apply(row)
+	  val row = input.next()
+	  val key: Row = cacheKeyProjection.apply(row) 
+	  if (cache.containsKey(key)){
+	    val resultUdf: Row = cache.get(key)
+	    Row.fromSeq(preUdf ++ resultUdf ++ postUdf)
+	  } else {
+	    val result: Row = udfProject.apply(row)
+	    cache.put(key, result)
+	    result
+	 }
+        } else {
+	  null
+	}	
     }
   }
 }
@@ -251,13 +265,14 @@ object AggregateIteratorGenerator {
       val postAggregateProjection = CS143Utils.getNewProjection(resultExpressions, inputSchema)
 
       def hasNext() = {
-        /* IMPLEMENT THIS METHOD */
-        false
+      	  input.hasNext()
       }
 
       def next() = {
-        /* IMPLEMENT THIS METHOD */
-        null
+      	  val (row, aggregateFn) = input.next()
+	  val aggregateResult = new GenericMutableRow(1)
+	  aggregateResult(0) = aggregateFn.eval()
+	  postAggregateProjection(new JoinedRow4(aggregateResult, row))
       }
     }
   }

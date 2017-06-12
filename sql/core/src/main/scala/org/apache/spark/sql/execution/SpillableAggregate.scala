@@ -63,7 +63,7 @@ case class SpillableAggregate(
   private[this] val aggregator: ComputedAggregate = aggregateComputation(0)
 
   /** Schema of the aggregate.  */
-  private[this] val aggregatorSchema: AttributeReference = aggregator.result
+  private[this] val aggregatorSchema: AttributeReference = aggregator.resultAttribute
 
   /** Creates a new aggregator instance.  */
   private[this] def newAggregatorInstance(): AggregateFunction = aggregator.aggregate.newInstance()
@@ -120,9 +120,17 @@ case class SpillableAggregate(
 
     new Iterator[Row] {
       var aggregateResult: Iterator[Row] = aggregate()
-
+      var dpIterator = spills.iterator
+ 
       def hasNext() = {
-      	  aggregateResult.hasNext ? true | fetchSpill
+      	  if (aggregateResult.hasNext){
+	    true
+	  } else {
+	    if(dp_iter.hasNext && fetchSpill())
+	      true
+	    else
+	      false
+	  }
       }
 
       def next() = {
@@ -135,17 +143,37 @@ case class SpillableAggregate(
         * @return
         */
       private def aggregate(): Iterator[Row] = {
-        /* IMPLEMENT THIS METHOD */
-        null
-      }
+        while(data.hasNext)
+	  val row: Row = data.next()
+	  val group = groupingProjecting(row)
+	  val agg = currentAggregationTable(gp)
+	  
+	  if (agg == null){
+	     if(CS143Utils.maybeSpill(currentAggregationTable, memorySize)) {
+	       spillRecord(r)
+	     } else { 
+	       agg = newAggregatorInstance()
+	       currentAggregationTable.update(group.copy(), agg)      
+	     }
+          }
 
+	  if(agg != null)
+	    agg.update(row)
+        }
+
+	for(dp <- spills){
+	  dp.closeInput()
+        }
+
+	AggregateIteratorGenerator(resultExpression, Seq(aggregatorSchema) ++ namedGroups.map(_._2))(currentAggregationTable.iterator)
+	}
       /**
         * Spill input rows to the proper partition using hashing
         *
         * @return
         */
       private def spillRecord(row: Row)  = {
-        /* IMPLEMENT THIS METHOD */
+        spills(row.hashCode % numPartitons).insert(row)
       }
 
       /**
@@ -163,8 +191,16 @@ case class SpillableAggregate(
         * @return
         */
       private def fetchSpill(): Boolean  = {
-        /* IMPLEMENT THIS METHOD */
-        false
+        while(!data.hasNext && dpIter.hasNext){
+	  data = dpIter.next.getData()
+	}
+	if (data.hasNext) {
+	  currentAggregateTable = new SizeTrackingAppendingOnlyMap[Row, AggregateFunction]
+	  aggregateResult = aggregate()
+	  true
+	} else {
+	  false
+	}
       }
     }
   }

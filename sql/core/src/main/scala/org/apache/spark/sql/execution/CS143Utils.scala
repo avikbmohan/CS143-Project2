@@ -133,6 +133,7 @@ object CS143Utils {
       if (e.isInstanceOf[ScalaUDF]) {
       	 udf = e.asInstanceOf[ScalaUdf]
       }}}
+      udf
   }
   /**
     * This function takes a sequence of expressions. If there is no UDF in the sequence of expressions, it does
@@ -184,8 +185,10 @@ object CS143Utils {
     * @return true if the addition of a new record will make the table grow beyond the allowed size
     */
   def maybeSpill[K, V](collection: SizeTrackingAppendOnlyMap[K, V], allowedMemory: Long): Boolean = {
-    /* IMPLEMENT THIS METHOD */
-    false
+      if (allowedMemory <= 2*collection.estimateSize()) 
+        true
+      else
+        false
   }
 }
 

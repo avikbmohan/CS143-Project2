@@ -52,13 +52,17 @@ protected [sql] final class GeneralDiskHashedRelation(partitions: Array[DiskPart
   extends DiskHashedRelation with Serializable {
 
   override def getIterator() = {
-    /* IMPLEMENT THIS METHOD */
-    null
+     if(partitions.length > 0){
+     	partitions.iterator
+     } else {
+        null
+     }
   }
 
   override def closeAllPartitions() = {
-    /* IMPLEMENT THIS METHOD */
-  }
+    for (p <- partitions){
+      p.closePartition()
+    }}
 }
 
 private[sql] class DiskPartition (
@@ -79,8 +83,14 @@ private[sql] class DiskPartition (
     * @param row the [[Row]] we are adding
     */
   def insert(row: Row) = {
-    /* IMPLEMENT THIS METHOD */
-  }
+      if (inputClosed)
+	throw new SparkException("Input Closed!\n")
+      data.add(row)
+      writtenToDisk = false
+      if (measurePartitionSize() > blockSize)
+      	 spillPartitionToDisk() //will change writtenToDisk -> True if needed
+	 data.clear()
+  }	 
 
   /**
     * This method converts the data to a byte array and returns the size of the byte array
@@ -122,13 +132,15 @@ private[sql] class DiskPartition (
       var byteArray: Array[Byte] = null
 
       override def next() = {
-        /* IMPLEMENT THIS METHOD */
-        null
+        if (currentIterator.hasNext){
+	   currentIterator.next()
+	} else {
+	   null
+	}        
       }
 
       override def hasNext() = {
-        /* IMPLEMENT THIS METHOD */
-        false
+       currentIterator.hasNext || fetchNextChunk()
       }
 
       /**
@@ -138,8 +150,10 @@ private[sql] class DiskPartition (
         * @return true unless the iterator is empty.
         */
       private[this] def fetchNextChunk(): Boolean = {
-        /* IMPLEMENT THIS METHOD */
-        false
+        if (chunkSizeIterator.hasNext){
+	  byteArray = CS143Utils.getNextChunkBytes(inStream, chunkSizeIterator.next(), byteArray)
+	  currentIterator = CS143Utils.getListFromBytes(byteArrray).iterator.asScala
+	  true
       }
     }
   }
@@ -152,7 +166,12 @@ private[sql] class DiskPartition (
     * also be closed.
     */
   def closeInput() = {
-    /* IMPLEMENT THIS METHOD */
+    if(!data.isEmpty){
+      spillPartitionToDisk()
+      data.clear()
+    }
+    outStream.flush()
+    outStream.close()
     inputClosed = true
   }
 
